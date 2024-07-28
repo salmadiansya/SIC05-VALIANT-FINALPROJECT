@@ -2,20 +2,21 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Load dataset
+# Constants for file paths
+DATASET_FILE = 'dataset/student_data.csv'
+LOG_DATA_FILE = 'dataset/log.csv'
+
+# Load student data with caching
 @st.cache_data
 def load_student_data():
-    return pd.read_csv('dataset/student_data.csv')
+    return pd.read_csv(DATASET_FILE, dtype={'nfc_card_id': str})
 
+# Load log data with error handling
 def load_log_data(log_data_file):
     try:
         return pd.read_csv(log_data_file)
     except FileNotFoundError:
         return pd.DataFrame(columns=['timestamp', 'student_name', 'student_class', 'nfc_card_id'])
-
-student_data = load_student_data()
-log_data_file = 'dataset/log.csv'
-log_data = load_log_data(log_data_file)
 
 # Define function to add log entry
 def add_log_entry(nfc_card_id):
@@ -30,11 +31,16 @@ def add_log_entry(nfc_card_id):
     else:
         return None
 
+# Define function to save log data
 def save_log_data(log_data):
     try:
-        log_data.to_csv(log_data_file, index=False)
+        log_data.to_csv(LOG_DATA_FILE, index=False)
     except Exception as e:
         st.error(f"Error saving log data: {e}")
+
+# Load data
+student_data = load_student_data()
+log_data = load_log_data(LOG_DATA_FILE)
 
 # Streamlit UI
 st.title("MAN10 JAKARTA T-BOX LOG")
@@ -42,7 +48,7 @@ st.title("MAN10 JAKARTA T-BOX LOG")
 # Section to display log data
 st.header("Log Notification")
 if st.button("Refresh"):
-    log_data = load_log_data(log_data_file)
+    log_data = load_log_data(LOG_DATA_FILE)
 st.dataframe(log_data)
 
 # Section to simulate NFC card reading
@@ -66,18 +72,21 @@ if student_name_search:
 else:
     st.write("Enter the student's name to search for their T-BOX log.")
 
-# Section to display student data
+# Display student data
 st.header("Student Data")
 st.dataframe(student_data)
 
 # Endpoint for receiving data from ESP32
-query_params = st.query_params
+query_params = st.experimental_get_query_params()
 if 'nfc_card_id' in query_params:
     nfc_card_id = query_params['nfc_card_id'][0]
     log_entry = add_log_entry(nfc_card_id)
     if log_entry is not None:
         log_data = pd.concat([log_data, log_entry], ignore_index=True)
-        log_data.to_csv(log_data_file, index=False)
+        save_log_data(log_data)
         st.write("Log entry added")
     else:
         st.write("No student found with NFC Card ID: ", nfc_card_id)
+
+# Save the current log data on application exit
+save_log_data(log_data)
